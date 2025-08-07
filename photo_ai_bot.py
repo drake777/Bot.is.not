@@ -3,7 +3,7 @@ from io import BytesIO
 from PIL import Image, ImageFilter, ImageOps
 
 TOKEN = '8232850637:AAH1IacLldpiLtshP_1p5T_a_RAipm-Zbu8'
-CHANNEL_CHAT_ID = -1001234567890  # <-- Вставь сюда chat_id своего канала
+CHANNEL_CHAT_ID = -1002770356572  # <-- Вставь сюда chat_id своего канала
 
 bot = telebot.TeleBot(TOKEN)
 
