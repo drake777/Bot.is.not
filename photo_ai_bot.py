@@ -1,13 +1,12 @@
 import telebot
 from io import BytesIO
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 
 TOKEN = '8232850637:AAH1IacLldpiLtshP_1p5T_a_RAipm-Zbu8'
-CHANNEL_CHAT_ID = -1002770356572  # <-- Вставь сюда chat_id своего канала
+CHANNEL_CHAT_ID = -1001234567890  # <-- Вставь сюда chat_id своего канала
 
 bot = telebot.TeleBot(TOKEN)
 
-# Доступные фильтры и их объекты
 FILTERS = {
     'BLUR': [ImageFilter.BLUR],
     'CONTOUR': [ImageFilter.CONTOUR],
@@ -16,10 +15,10 @@ FILTERS = {
     'EMBOSS': [ImageFilter.EMBOSS],
     'SHARPEN': [ImageFilter.SHARPEN],
     'SMOOTH': [ImageFilter.SMOOTH],
-    'FIND_EDGES': [ImageFilter.FIND_EDGES]
+    'FIND_EDGES': [ImageFilter.FIND_EDGES],
+    'BLACK_WHITE': ['BLACK_WHITE']  # Особый фильтр, обрабатываем отдельно
 }
 
-# Словарь: user_id -> список выбранных фильтров
 user_filter_choices = {}
 
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
@@ -42,8 +41,14 @@ def finish_selection(message):
         bot.reply_to(message, "Ты не выбрал ни одного фильтра. Использую фильтр по умолчанию: CONTOUR + SHARPEN.")
         user_filter_choices[user_id] = ['CONTOUR', 'SHARPEN']
     else:
-        bot.reply_to(message, f"Выбраны фильтры: {', '.join(user_filter_choices[user_id])}. Теперь пришли фото.")
-        
+        bot.reply_to(message, f"Выбраны фильтры: {', '.join(selected)}. Теперь пришли фото.")
+
+@bot.message_handler(commands=['clear'])
+def clear_filters(message):
+    user_id = message.from_user.id
+    user_filter_choices.pop(user_id, None)
+    bot.reply_to(message, "Фильтры сброшены. Фото будет отправляться без обработки.")
+
 @bot.message_handler(func=lambda message: message.text in FILTERS.keys())
 def add_filter(message):
     user_id = message.from_user.id
@@ -59,7 +64,7 @@ def add_filter(message):
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     user_id = message.from_user.id
-    filters = user_filter_choices.get(user_id, ['CONTOUR', 'SHARPEN'])
+    filters = user_filter_choices.get(user_id)
 
     # Переслать исходное фото в канал
     try:
@@ -72,10 +77,18 @@ def handle_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         image = Image.open(BytesIO(downloaded_file))
 
-        # Применяем выбранные фильтры по очереди
+        if not filters or len(filters) == 0:
+            # Нет фильтров — отправляем оригинал
+            bot.send_photo(message.chat.id, message.photo[-1].file_id, caption="Фото без обработки")
+            return
+
+        # Применяем фильтры
         for f_name in filters:
-            for f in FILTERS[f_name]:
-                image = image.filter(f)
+            if f_name == 'BLACK_WHITE':
+                image = ImageOps.grayscale(image)
+            else:
+                for f in FILTERS[f_name]:
+                    image = image.filter(f)
 
         output = BytesIO()
         output.name = 'processed.jpg'
