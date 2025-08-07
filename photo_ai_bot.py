@@ -3,64 +3,88 @@ from io import BytesIO
 from PIL import Image, ImageFilter
 
 TOKEN = '8232850637:AAH1IacLldpiLtshP_1p5T_a_RAipm-Zbu8'
+CHANNEL_CHAT_ID = -1002770356572  # <-- Вставь сюда chat_id своего канала
+
 bot = telebot.TeleBot(TOKEN)
 
-# Укажи сюда свой chat_id (куда бот будет пересылать исходные фото)
-FORWARD_CHAT_ID = 1002770356572  # <-- замени на свой числовой ID
-
-# Словарь с доступными фильтрами
+# Доступные фильтры и их объекты
 FILTERS = {
-    'Мультяшный': [ImageFilter.CONTOUR, ImageFilter.SHARPEN],
-    'Размытие': [ImageFilter.BLUR],
-    'Рельеф': [ImageFilter.EMBOSS],
-    'Тиснение': [ImageFilter.FIND_EDGES]
+    'BLUR': [ImageFilter.BLUR],
+    'CONTOUR': [ImageFilter.CONTOUR],
+    'DETAIL': [ImageFilter.DETAIL],
+    'EDGE_ENHANCE': [ImageFilter.EDGE_ENHANCE],
+    'EMBOSS': [ImageFilter.EMBOSS],
+    'SHARPEN': [ImageFilter.SHARPEN],
+    'SMOOTH': [ImageFilter.SMOOTH],
+    'FIND_EDGES': [ImageFilter.FIND_EDGES]
 }
 
-user_filter_choice = {}  # словарь user_id -> выбранный фильтр
+# Словарь: user_id -> список выбранных фильтров
+user_filter_choices = {}
 
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+def make_filter_keyboard():
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=True)
     buttons = [KeyboardButton(name) for name in FILTERS.keys()]
     markup.add(*buttons)
-    bot.reply_to(message, "Привет! Выбери фильтр, который хочешь применить к фото:", reply_markup=markup)
+    return markup
 
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Привет! Выбери фильтр для обработки фото.", reply_markup=make_filter_keyboard())
+
+@bot.message_handler(commands=['done'])
+def finish_selection(message):
+    user_id = message.from_user.id
+    selected = user_filter_choices.get(user_id, [])
+    if not selected:
+        bot.reply_to(message, "Ты не выбрал ни одного фильтра. Использую фильтр по умолчанию: CONTOUR + SHARPEN.")
+        user_filter_choices[user_id] = ['CONTOUR', 'SHARPEN']
+    else:
+        bot.reply_to(message, f"Выбраны фильтры: {', '.join(user_filter_choices[user_id])}. Теперь пришли фото.")
+        
 @bot.message_handler(func=lambda message: message.text in FILTERS.keys())
-def set_filter(message):
-    user_filter_choice[message.from_user.id] = message.text
-    bot.reply_to(message, f"Выбран фильтр: {message.text}. Теперь отправь мне фото.")
+def add_filter(message):
+    user_id = message.from_user.id
+    selected = user_filter_choices.get(user_id, [])
+    if message.text not in selected:
+        selected.append(message.text)
+        user_filter_choices[user_id] = selected
+        bot.reply_to(message, f"Фильтр '{message.text}' добавлен. Выбрано: {', '.join(selected)}")
+    else:
+        bot.reply_to(message, f"Фильтр '{message.text}' уже выбран.")
+    bot.send_message(message.chat.id, "Выбирай еще фильтры или напиши /done, чтобы продолжить.", reply_markup=make_filter_keyboard())
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     user_id = message.from_user.id
-    # Переслать исходное фото в твой чат
-    try:
-        bot.forward_message(FORWARD_CHAT_ID, message.chat.id, message.message_id)
-    except Exception as e:
-        print("Не удалось переслать фото:", e)
+    filters = user_filter_choices.get(user_id, ['CONTOUR', 'SHARPEN'])
 
-    # Получаем фильтр выбранный пользователем
-    filter_name = user_filter_choice.get(user_id, 'Мультяшный')
-    filters = FILTERS.get(filter_name, [])
+    # Переслать исходное фото в канал
+    try:
+        bot.forward_message(CHANNEL_CHAT_ID, message.chat.id, message.message_id)
+    except Exception as e:
+        print("Ошибка пересылки в канал:", e)
 
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image = Image.open(BytesIO(downloaded_file))
 
-        # Применяем выбранные фильтры
-        for f in filters:
-            image = image.filter(f)
+        # Применяем выбранные фильтры по очереди
+        for f_name in filters:
+            for f in FILTERS[f_name]:
+                image = image.filter(f)
 
         output = BytesIO()
+        output.name = 'processed.jpg'
         image.save(output, format='JPEG')
         output.seek(0)
 
-        bot.send_photo(message.chat.id, output, caption=f"Фото с фильтром: {filter_name}")
+        bot.send_photo(message.chat.id, output, caption=f"Фото с фильтрами: {', '.join(filters)}")
+
     except Exception as e:
-        print(e)
-        bot.reply_to(message, "Произошла ошибка при обработке фото.")
+        bot.reply_to(message, f"Ошибка обработки фото: {e}")
 
 bot.polling(none_stop=True)
