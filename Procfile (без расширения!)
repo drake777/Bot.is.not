@@ -1,1 +1,1 @@
-worker: python Bot.is.Not.py
+worker: python Bot.is.not.py
