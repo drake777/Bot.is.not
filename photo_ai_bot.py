@@ -2,7 +2,7 @@ import telebot
 from io import BytesIO
 from PIL import Image, ImageFilter
 
-TOKEN = '8232850637:AAF38n4pLP6QA7FJi0A34K_etBpMF4k4Kzw'
+TOKEN = '8232850637:AAG6B1FM8HxMluAadMd_AfC57Jyz6ulNtL'
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
