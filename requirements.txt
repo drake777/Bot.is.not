@@ -3,3 +3,4 @@ Pillow
 rembg
 pillow
 telebot
+onnxruntime==1.16.3
