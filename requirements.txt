@@ -1,4 +1,2 @@
 pyTelegramBotAPI
 Pillow
-rembg
-onnxruntime==1.16.3
